@@ -1,0 +1,23 @@
+# Environment / secrets
+.env
+*.env.local
+.env.deploy.yaml
+
+# Database
+*.db
+*.sqlite3
+briefing.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Manual test scratch output
+scripts/last_summary_output.txt

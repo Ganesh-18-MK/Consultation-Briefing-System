@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.env
+.env.example
+leads.xlsx
+scripts/last_summary_output.txt
+scripts/sample_client_answer.txt
+tests/
+*.md
+.pytest_cache/

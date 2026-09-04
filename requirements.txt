@@ -1,0 +1,23 @@
+# Web service (Calendly + Fireflies webhook receiver)
+flask==3.0.3
+gunicorn==22.0.0
+
+# Storage — Firestore (see app/db.py; Cloud Run's own disk doesn't
+# persist across restarts, so bookings/clients/notes live here instead)
+google-cloud-firestore==2.30.0
+
+# HTTP + Microsoft Graph auth (Teams chat delivery only — see graph_client.py)
+requests==2.32.3
+msal==1.28.0
+
+# Summarization — Groq's free API tier (see README "Why Groq")
+groq==1.7.0
+
+# Leads spreadsheet
+openpyxl==3.1.5
+
+# Config
+python-dotenv==1.0.1
+
+# Dev / test
+pytest==8.2.2

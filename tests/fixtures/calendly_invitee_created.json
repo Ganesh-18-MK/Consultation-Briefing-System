@@ -1,0 +1,41 @@
+{
+  "created_at": "2026-09-02T12:00:00.000000Z",
+  "created_by": "https://api.calendly.com/users/HOST_UUID",
+  "event": "invitee.created",
+  "payload": {
+    "cancel_url": "https://calendly.com/cancellations/INVITEE_UUID",
+    "created_at": "2026-09-02T12:00:00.000000Z",
+    "email": "jane.client@example.com",
+    "event": "https://api.calendly.com/scheduled_events/EVENT_UUID",
+    "name": "Jane Client",
+    "new_invitee": null,
+    "no_show": null,
+    "old_invitee": null,
+    "payment": null,
+    "questions_and_answers": [
+      {
+        "position": 0,
+        "question": "Please share anything that will help prepare for our meeting.",
+        "answer": "I need help with an H-1B extension, my current status expires in 60 days and my employer wants to change my job title."
+      }
+    ],
+    "reconfirmation": null,
+    "reschedule_url": "https://calendly.com/reschedulings/INVITEE_UUID",
+    "rescheduled": false,
+    "routing_form_submission": null,
+    "status": "active",
+    "text_reminder_number": null,
+    "timezone": "America/New_York",
+    "tracking": {
+      "utm_campaign": null,
+      "utm_source": null,
+      "utm_medium": null,
+      "utm_content": null,
+      "utm_term": null,
+      "salesforce_uuid": null
+    },
+    "updated_at": "2026-09-02T12:00:00.000000Z",
+    "uri": "https://api.calendly.com/scheduled_events/EVENT_UUID/invitees/INVITEE_UUID",
+    "cancellation": null
+  }
+}
