@@ -265,9 +265,14 @@ gcloud run deploy calendly-briefing-system \
     --execution-environment=gen2 \
     --add-volume=name=leads-sheet,type=cloud-storage,bucket=YOUR_PROJECT_ID-leads-sheet \
     --add-volume-mount=volume=leads-sheet,mount-path=/data \
-    --set-env-vars=LEADS_SHEET_PATH=/data/leads.xlsx \
     --env-vars-file=.env.deploy.yaml
 ```
+
+(There's no separate `--set-env-vars` flag here — `gcloud run deploy` treats
+`--set-env-vars` and `--env-vars-file` as alternative ways of doing the same
+thing, so they can't both appear in one command. The `LEADS_SHEET_PATH`
+override for the mount path is folded into the generated YAML instead — see
+below.)
 
 A few things about that command:
 
@@ -300,8 +305,11 @@ A few things about that command:
           if not line or line.startswith('#') or '=' not in line:
               continue
           key, _, val = line.partition('=')
+          if key == 'LEADS_SHEET_PATH':
+              continue  # overridden below — Cloud Run's local path is /data, not the one in .env
           val = val.strip().strip('\"')
           out.write(f'{key}: {val!r}\n')
+      out.write(\"LEADS_SHEET_PATH: '/data/leads.xlsx'\n\")
   "
   ```
 

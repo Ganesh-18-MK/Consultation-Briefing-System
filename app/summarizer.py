@@ -6,9 +6,9 @@ tuned without touching the others.
 Requirement 1's Calendly question ("Please share anything that will help
 prepare for our meeting.") can come back as one line or as a long,
 detailed narrative (case facts, dates, dollar amounts, deadlines) — see
-summarize_discussion_notes below, which condenses it to at most 6-7
-sentences without losing the concrete facts an attorney needs, and
-without padding out an already-short answer.
+summarize_discussion_notes below, which condenses it to a short bullet-point
+list (at most 6-7 bullets) without losing the concrete facts an attorney
+needs, and without padding out an already-short answer.
 
 Runs on Groq's free API tier (https://console.groq.com) rather than
 Anthropic's Claude, which is what the original plan document assumed —
@@ -72,23 +72,25 @@ will help prepare for our meeting" on the booking form. That answer varies enorm
 short sentence, a detailed case narrative with specific facts, or a long list of many distinct \
 questions (common for visa clients juggling several filings at once).
 
-Summarize it in at most 6-7 sentences, short enough for an attorney to read in under a minute \
-before the call. Adapt to what kind of answer it is:
+Summarize it as a numbered list (1. 2. 3. ...), using at most 6-7 points total — short enough \
+for an attorney to read in under a minute before the call. Adapt to what kind of answer it is:
 - A narrative with concrete facts (dates, deadlines, dollar amounts, named people or companies, \
-statuses): preserve those facts — do not drop them just to hit a shorter length.
-- A long list of many distinct questions, too many to restate individually in 6-7 sentences: do \
-NOT try to cram every question in as a run-on sentence. Instead, group them into the 2-4 real \
-underlying decisions or themes at stake, and call out by name only the most time-sensitive or \
-highest-stakes items (a specific deadline, an irreversible choice). Make it clear this is a \
-condensed overview, not the full list — the attorney can read the client's original answer for \
-every individual question.
+statuses): break it into separate numbered points by fact or topic — preserve those facts, do \
+not drop them just to keep the list short.
+- A long list of many distinct questions, too many to restate individually: do NOT write one \
+numbered point per question. Instead, group them into 2-4 numbered points, one per real \
+underlying decision or theme at stake, and call out by name only the most time-sensitive or \
+highest-stakes items (a specific deadline, an irreversible choice) within those points. Make it \
+clear this is a condensed overview, not the full list — the attorney can read the client's \
+original answer for every individual question.
 Do not invent or infer anything the client didn't say. If the client's answer is already short, \
-do NOT pad it out to reach 6-7 sentences — return it as concisely as it deserves, even a single \
-sentence. If no answer was provided, say so plainly in one sentence instead of guessing. Stay \
-strictly descriptive: summarize what the client said and asked, but do not add your own advice, \
+do NOT pad it out to reach 6-7 points — use as few points as it deserves, even just one. If no \
+answer was provided, say so plainly in a single point instead of guessing. Stay strictly \
+descriptive: summarize what the client said and asked, but do not add your own advice, \
 recommendations, or a suggested order to address things in — prioritizing and advising is the \
 attorney's judgment call, not something to include in the summary. Do not include a preamble or \
-heading — output only the summary itself."""
+heading, and do not add a closing summary line — output only the numbered list itself, each point \
+on its own line starting with its number followed by a period and a space (e.g. "1. ")."""
 
 
 def summarize_discussion_notes(client_name: str, raw_notes: str | None) -> str:
@@ -98,15 +100,16 @@ def summarize_discussion_notes(client_name: str, raw_notes: str | None) -> str:
     # Generous max_tokens on purpose — some of these (e.g. a demand-letter
     # fact pattern with dates/dollar amounts/multiple parties) are long,
     # and a reasoning model needs real headroom beyond the visible 6-7
-    # sentences (see the reasoning_effort note on _complete above).
+    # bullets (see the reasoning_effort note on _complete above).
     return _complete(DISCUSSION_SYSTEM_PROMPT, user, max_tokens=700)
 
 
 HISTORY_SYSTEM_PROMPT = """You prepare short case-history briefings for attorneys at a law firm \
 ahead of a returning client's consultation. You'll be given summarized notes from that client's \
-prior meetings, most recent first. Write a short case history (3-6 sentences or bullet points) \
-covering what's been discussed before and where things stand. Note if information is dated or \
-notes are sparse. Do not invent details. Do not include a preamble or heading."""
+prior meetings, most recent first. Write a short case history as a numbered list (3-6 points, each starting with its number \
+followed by a period and a space, e.g. "1. ") covering what's been discussed before and where \
+things stand. Note if information is dated or notes are sparse. Do not invent details. Do not \
+include a preamble or heading — output only the numbered list."""
 
 
 def summarize_client_history(client_name: str, prior_notes: list[str]) -> str:
@@ -118,11 +121,13 @@ def summarize_client_history(client_name: str, prior_notes: list[str]) -> str:
 
 
 TRANSCRIPT_SYSTEM_PROMPT = """You turn a raw Teams meeting transcript from a law firm client \
-consultation into concise case notes for the file. Summarize: what was discussed, key facts the \
-client shared, and any next steps or follow-ups mentioned. Write in plain professional language, \
-as bullet points or short paragraphs. Do not include filler like "the meeting began with..." or \
-transcribe verbatim dialogue. Do not include a preamble or heading. If the transcript is mostly \
-noise or too short to summarize meaningfully, say so plainly instead of padding the output."""
+consultation into concise case notes for the file. Summarize as a numbered list, each point \
+starting with its number followed by a period and a space (e.g. "1. "): what was discussed, key \
+facts the client shared, and any next steps or follow-ups mentioned. Write in plain professional \
+language. Do not include filler like "the meeting began with..." or transcribe verbatim dialogue. \
+Do not include a preamble or heading — output only the numbered list. If the transcript is mostly \
+noise or too short to summarize meaningfully, say so plainly in a single point instead of padding \
+the output."""
 
 
 def summarize_transcript(client_name: str, transcript_text: str) -> str:
@@ -132,11 +137,12 @@ def summarize_transcript(client_name: str, transcript_text: str) -> str:
 
 CATCHUP_SYSTEM_PROMPT = """You write short "here's what you missed" recaps for an attorney joining a \
 law firm client consultation late. You'll be given a partial transcript of the meeting so far. \
-Summarize what has been discussed up to this point in 3-5 bullet points, focused on helping someone \
-jump in mid-conversation: what topics have come up, what the client has said, and where the \
-conversation currently stands. Write in plain, professional language. Do not invent anything not in \
-the transcript, and do not comment on the transcript being partial or incomplete. Do not include a \
-preamble or heading — output only the bullet points, each starting with "- "."""
+Summarize what has been discussed up to this point as a numbered list (3-5 points), focused on \
+helping someone jump in mid-conversation: what topics have come up, what the client has said, and \
+where the conversation currently stands. Write in plain, professional language. Do not invent \
+anything not in the transcript, and do not comment on the transcript being partial or incomplete. \
+Do not include a preamble or heading — output only the numbered list, each point starting with its \
+number followed by a period and a space (e.g. "1. ")."""
 
 
 def summarize_live_catchup(client_name: str, transcript_so_far: str) -> str:

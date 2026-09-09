@@ -5,8 +5,8 @@ from app import brief_scheduler, summarizer, db, teams_delivery
 
 def test_brief_uses_groq_summary_of_the_clients_answer(temp_db, monkeypatch):
     """Requirement 1: the client's raw Calendly answer can be one line
-    or a long case narrative, so it's condensed via Groq to at most
-    6-7 sentences before it's sent to the manager."""
+    or a long case narrative, so it's condensed via Groq to a short
+    bullet-point list before it's sent to the manager."""
     monkeypatch.setattr(
         summarizer, "summarize_discussion_notes",
         lambda name, notes: "- condensed to a few sentences, key facts preserved",

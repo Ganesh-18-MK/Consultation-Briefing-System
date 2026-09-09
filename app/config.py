@@ -56,9 +56,18 @@ class Settings:
     ms_client_secret: str = os.getenv("MS_CLIENT_SECRET", "")
     # Optional secondary path — plain channel broadcast, never required.
     teams_channel_webhook_url: str = os.getenv("TEAMS_CHANNEL_WEBHOOK_URL", "")
-    # Primary path: 1:1 chat with the manager. Default true since every
-    # requirement routes through it now; flip to false only if this
-    # tenant genuinely doesn't support app-only chat messaging.
+    # Primary path: the manager's private 1:1 chat, delivered via a
+    # Power Automate "Workflows" webhook she creates herself (Teams >
+    # search "Workflows" > template "Send webhook alerts to a chat",
+    # pointed at her own chat). This replaced the original Graph
+    # app-only Chat.Create/ChatMessage.Send approach, which turned out
+    # to be impossible — Microsoft only offers ChatMessage.Send as a
+    # Delegated permission, never Application, so there's no way to
+    # send a 1:1 chat message via client-credentials auth at all.
+    teams_manager_webhook_url: str = os.getenv("TEAMS_MANAGER_WEBHOOK_URL", "")
+    # Default true since every requirement routes through it now; flip
+    # to false to silence manager-chat delivery without unsetting the
+    # webhook URL.
     teams_dm_enabled: bool = _bool("TEAMS_DM_ENABLED", True)
     attorney_upn_overrides: dict = field(
         default_factory=lambda: json.loads(os.getenv("ATTORNEY_UPN_OVERRIDES", "{}") or "{}")
