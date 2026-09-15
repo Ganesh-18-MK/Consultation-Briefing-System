@@ -133,6 +133,7 @@ def create_booking(
     discussion_notes: Optional[str],
     join_url: Optional[str],
     is_repeat_client: bool,
+    brief_deadline_iso: Optional[str] = None,
 ) -> str:
     ref = _db().collection(BOOKINGS).document(calendly_event_uuid)
     ref.set(
@@ -145,6 +146,14 @@ def create_booking(
             "discussion_notes": discussion_notes,
             "join_url": join_url,
             "is_repeat_client": bool(is_repeat_client),
+            # Requirement (2026-09-15): mam's two fixed daily consultation
+            # blocks (see app/timezones.compute_brief_deadline_utc) each
+            # have one shared briefing deadline rather than every booking
+            # being briefed ~15 minutes before its own start time. None
+            # here means the booking falls outside both blocks, and
+            # get_unbriefed_bookings_in_window's original per-booking
+            # window is the fallback for it (see that function below).
+            "brief_deadline": brief_deadline_iso,
             "briefed_at": None,
             "brief_summary": None,
             "notes_synced_at": None,
@@ -175,8 +184,11 @@ def get_unbriefed_bookings_in_window(
     lead_min_minutes: Optional[int] = None,
     lead_max_minutes: Optional[int] = None,
 ) -> list[dict]:
-    """Stage 3: consultations starting soon that haven't been briefed
-    yet. Uses the (status, start_time) composite index — see README."""
+    """Stage 3 original design: consultations starting soon that haven't
+    been briefed yet. Uses the (status, start_time) composite index —
+    see README. Only a fallback now for a booking with no brief_deadline
+    (i.e. one outside mam's two consultation blocks — see
+    get_bookings_due_for_block_brief below, which is the primary path)."""
     now = now or datetime.now(timezone.utc)
     lead_min = lead_min_minutes if lead_min_minutes is not None else settings.brief_lead_min_minutes
     lead_max = lead_max_minutes if lead_max_minutes is not None else settings.brief_lead_max_minutes
@@ -190,6 +202,28 @@ def get_unbriefed_bookings_in_window(
         .where("start_time", ">=", window_start)
         .where("start_time", "<=", window_end)
         .order_by("start_time")
+        .stream()
+    )
+    results = [_doc_to_dict(d) for d in docs]
+    return [b for b in results if b.get("briefed_at") is None and b.get("brief_deadline") is None]
+
+
+def get_bookings_due_for_block_brief(now: Optional[datetime] = None) -> list[dict]:
+    """Requirement (2026-09-15): the primary briefing path — every
+    consultation whose block deadline (brief_deadline, set at booking
+    time by app/timezones.compute_brief_deadline_utc) has arrived and
+    hasn't been briefed yet. Needs its own (status, brief_deadline)
+    composite index — see README — separate from the (status,
+    start_time) one get_unbriefed_bookings_in_window above still uses
+    for its fallback role."""
+    now_iso = (now or datetime.now(timezone.utc)).isoformat()
+
+    docs = (
+        _db()
+        .collection(BOOKINGS)
+        .where("status", "==", "scheduled")
+        .where("brief_deadline", "<=", now_iso)
+        .order_by("brief_deadline")
         .stream()
     )
     results = [_doc_to_dict(d) for d in docs]

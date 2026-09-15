@@ -77,6 +77,56 @@ def test_mark_briefed_removes_booking_from_window(temp_db):
     assert due == []
 
 
+def test_get_bookings_due_for_block_brief(temp_db):
+    client_id, _ = db.upsert_client("jane@example.com", "Jane Client")
+    now = datetime.now(timezone.utc)
+
+    due = now - timedelta(minutes=5)   # deadline already passed
+    not_yet = now + timedelta(hours=2)  # deadline still in the future
+    no_deadline = now + timedelta(minutes=10)  # outside both blocks
+
+    db.create_booking(
+        "evt-due", client_id, "attorney@example.com", due.isoformat(),
+        None, None, False, brief_deadline_iso=due.isoformat(),
+    )
+    db.create_booking(
+        "evt-not-yet", client_id, "attorney@example.com", not_yet.isoformat(),
+        None, None, False, brief_deadline_iso=not_yet.isoformat(),
+    )
+    db.create_booking(
+        "evt-no-deadline", client_id, "attorney@example.com", no_deadline.isoformat(),
+        None, None, False,
+    )
+
+    due_bookings = db.get_bookings_due_for_block_brief(now=now)
+    uuids = {row["calendly_event_uuid"] for row in due_bookings}
+    assert uuids == {"evt-due"}
+
+
+def test_unbriefed_bookings_window_excludes_block_scheduled_bookings(temp_db):
+    # get_unbriefed_bookings_in_window is only a fallback now for a
+    # booking with no brief_deadline — one with a deadline (i.e. inside
+    # one of mam's two blocks) is handled exclusively by
+    # get_bookings_due_for_block_brief, even if it also happens to fall
+    # inside the old ~15-minutes-before-start window.
+    client_id, _ = db.upsert_client("jane@example.com", "Jane Client")
+    now = datetime.now(timezone.utc)
+    start = now + timedelta(minutes=10)
+
+    db.create_booking(
+        "evt-in-block", client_id, "attorney@example.com", start.isoformat(),
+        None, None, False, brief_deadline_iso=(now + timedelta(minutes=1)).isoformat(),
+    )
+    db.create_booking(
+        "evt-no-block", client_id, "attorney@example.com", start.isoformat(),
+        None, None, False,
+    )
+
+    due = db.get_unbriefed_bookings_in_window(now=now, lead_min_minutes=8, lead_max_minutes=13)
+    uuids = {row["calendly_event_uuid"] for row in due}
+    assert uuids == {"evt-no-block"}
+
+
 def test_meeting_notes_ordering(temp_db):
     client_id, _ = db.upsert_client("jane@example.com", "Jane Client")
     booking_id = db.create_booking(

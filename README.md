@@ -240,6 +240,13 @@ gcloud firestore indexes composite create \
     --field-config field-path=attorney_email,order=ascending \
     --field-config field-path=notes_synced_at,order=ascending
 
+# Requirement (2026-09-15): mam's two fixed daily consultation blocks —
+# see app/timezones.py and app/db.py's get_bookings_due_for_block_brief.
+gcloud firestore indexes composite create \
+    --collection-group=bookings \
+    --field-config field-path=status,order=ascending \
+    --field-config field-path=brief_deadline,order=ascending
+
 # Create the bucket the leads spreadsheet lives on — Cloud Run's own
 # disk doesn't survive a restart, so this file needs to live somewhere
 # that does (see app/leads_sheet.py). A plain SQLite-style file

@@ -16,6 +16,12 @@ groq==1.7.0
 # Leads spreadsheet
 openpyxl==3.1.5
 
+# Timezone data (America/Chicago, for the block-deadline / display
+# logic in app/timezones.py) — Python's stdlib zoneinfo needs a real
+# IANA tzdata source, and a minimal Docker base image isn't guaranteed
+# to have the system one, so this pins it explicitly.
+tzdata==2024.1
+
 # Config
 python-dotenv==1.0.1
 

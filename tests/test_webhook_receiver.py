@@ -49,6 +49,35 @@ def test_invitee_created_records_new_client(temp_db, no_signature_check, fake_ev
     assert booking["attorney_email"] == "attorney@example.com"
     assert booking["is_repeat_client"] == 0
     assert "H-1B extension" in booking["discussion_notes"]
+    # fake_event_details' start_time (18:30 UTC = 1:30 PM Central) falls
+    # outside both of mam's consultation blocks, so no brief_deadline is
+    # set — brief_scheduler falls back to the ~15-minutes-before-start
+    # window for it (see db.get_unbriefed_bookings_in_window).
+    assert booking["brief_deadline"] is None
+
+
+def test_invitee_created_sets_brief_deadline_for_a_block_booking(
+    temp_db, no_signature_check, client, monkeypatch
+):
+    from app import calendly_client
+
+    def _fake(event_uri):
+        return {
+            # 14:30 UTC = 9:30 AM Central (September = Daylight Time) —
+            # inside the 9:00-10:15 AM block.
+            "start_time": "2026-09-15T14:30:00Z",
+            "attorney_email": "attorney@example.com",
+            "join_url": "https://teams.microsoft.com/l/meetup-join/fake",
+        }
+
+    monkeypatch.setattr(calendly_client, "get_event_details", _fake)
+
+    body = json.loads(FIXTURE_PATH.read_text())
+    resp = client.post("/webhooks/calendly", data=json.dumps(body), content_type="application/json")
+
+    assert resp.status_code == 201
+    booking = db.get_booking_by_uuid("INVITEE_UUID")
+    assert booking["brief_deadline"] == "2026-09-15T13:00:00+00:00"
 
 
 def test_second_booking_flagged_as_repeat_client(temp_db, no_signature_check, fake_event_details, client):
@@ -122,13 +151,20 @@ def test_valid_signature_accepted(temp_db, fake_event_details, client, monkeypat
 
 # ─── Leads sheet integration (Calendly path, requirement 5) ───────────
 
-def test_invitee_created_appends_leads_sheet_row(temp_db, no_signature_check, fake_event_details, client, tmp_path, monkeypatch):
+def test_invitee_created_records_leads_sheet_entry(temp_db, no_signature_check, fake_event_details, client, tmp_path, monkeypatch):
     from openpyxl import load_workbook
-    from app import leads_sheet
+    from app import leads_sheet, summarizer
 
     dest = tmp_path / "leads.xlsx"
     monkeypatch.setattr(settings, "leads_sheet_path", str(dest))
     monkeypatch.setattr(settings, "leads_sheet_enabled", True)
+    # Sheet content should be the Groq-summarized numbered list, not the
+    # client's raw answer — confirm the summarizer's output is what
+    # actually lands in the cell.
+    monkeypatch.setattr(
+        summarizer, "summarize_discussion_notes",
+        lambda name, notes: "1. Wants an H-1B extension.\n2. Needs it done before March.",
+    )
 
     body = json.loads(FIXTURE_PATH.read_text())
     resp = client.post("/webhooks/calendly", data=json.dumps(body), content_type="application/json")
@@ -139,9 +175,19 @@ def test_invitee_created_appends_leads_sheet_row(temp_db, no_signature_check, fa
 
     wb = load_workbook(dest)
     ws = wb.active
+    header_row = [cell.value for cell in ws[1]]
+    assert header_row[0] == "Client Name"
+    assert header_row[1] == "Email"
+    assert header_row[2] == "Owner"
     data_row = [cell.value for cell in ws[2]]
-    assert data_row[2]  # client name column populated
-    assert "H-1B extension" in (data_row[3] or "")
+    assert data_row[0]  # client name column populated
+    assert data_row[1]  # email column populated
+    assert data_row[3] == "1. Wants an H-1B extension.\n2. Needs it done before March."
+
+    # Wrap Text must be on, or Excel shows the numbered list run together
+    # on one line instead of each point on its own visual line.
+    cell = ws.cell(row=2, column=4)
+    assert cell.alignment.wrap_text is True
 
 
 def test_invitee_created_still_succeeds_when_leads_sheet_write_fails(
@@ -152,7 +198,7 @@ def test_invitee_created_still_succeeds_when_leads_sheet_write_fails(
     def _boom(**kwargs):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(leads_sheet, "append_booking_row", _boom)
+    monkeypatch.setattr(leads_sheet, "record_client_response", _boom)
 
     body = json.loads(FIXTURE_PATH.read_text())
     resp = client.post("/webhooks/calendly", data=json.dumps(body), content_type="application/json")

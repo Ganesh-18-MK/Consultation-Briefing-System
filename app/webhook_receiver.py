@@ -28,7 +28,7 @@ from functools import wraps
 
 from flask import Flask, request, jsonify
 
-from app import brief_scheduler, calendly_client, db, fireflies_client, leads_sheet, live_catchup, summarizer, teams_delivery
+from app import brief_scheduler, calendly_client, db, fireflies_client, leads_sheet, live_catchup, summarizer, teams_delivery, timezones
 from app.calendly_signature import SignatureError, verify_signature
 from app.config import settings
 from app.logging_config import get_logger
@@ -55,10 +55,14 @@ def _client_name(client_id: str) -> str:
 
 
 def _fmt_dt(iso_str: str | None) -> str:
+    """Post-meeting-notes Teams message uses this — kept consistent with
+    the pre-meeting brief's Date/Time formatting (leads_sheet.format_date_time),
+    which converts to IST for display."""
     if not iso_str:
         return ""
     try:
-        return datetime.fromisoformat(iso_str).strftime("%Y-%m-%d %H:%M UTC")
+        date_str, time_str = leads_sheet.format_date_time(iso_str)
+        return f"{date_str} {time_str}"
     except ValueError:
         return iso_str
 
@@ -98,6 +102,10 @@ def _handle_invitee_created(payload: dict) -> tuple[dict, int]:
     client_email = payload["email"]
     client_name = payload.get("name")
     discussion_notes = _extract_discussion_notes(payload)
+    # Summarized immediately (not just later, at brief time) so the
+    # leads sheet gets the same short numbered-list version the manager
+    # sees in Teams, instead of the client's raw, unformatted answer.
+    discussion_summary_for_sheet = summarizer.summarize_discussion_notes(client_name or client_email, discussion_notes)
 
     event_details = calendly_client.get_event_details(payload["event"])
 
@@ -124,6 +132,7 @@ def _handle_invitee_created(payload: dict) -> tuple[dict, int]:
         discussion_notes=discussion_notes,
         join_url=event_details["join_url"],
         is_repeat_client=is_repeat_client,
+        brief_deadline_iso=timezones.compute_brief_deadline_utc(start_time),
     )
 
     log.info(
@@ -134,22 +143,23 @@ def _handle_invitee_created(payload: dict) -> tuple[dict, int]:
         is_repeat_client,
     )
 
-    # Requirement 5: a row per booking, added the moment it's made —
-    # never blocks recording the booking itself if the sheet write fails.
-    # A failure here just means the booking stays in
+    # Requirement 5: one row per CLIENT (keyed by email), one column per
+    # distinct booking date — written the moment the booking is made,
+    # never blocking recording the booking itself if the sheet write
+    # fails. A failure here just means the booking stays in
     # get_bookings_needing_leads_sheet_sync() for the manual --backfill
     # pass to pick up later, rather than being lost.
     try:
-        date_str, time_str = leads_sheet.format_date_time(start_time)
-        leads_sheet.append_booking_row(
-            date_str=date_str,
-            time_str=time_str,
+        date_str = leads_sheet.format_date(start_time)
+        leads_sheet.record_client_response(
             client_name=client_name or client_email,
-            purpose=discussion_notes or "",
+            client_email=client_email,
+            date_str=date_str,
+            questions=discussion_summary_for_sheet,
         )
         db.mark_leads_sheet_synced(booking_id)
     except Exception:
-        log.exception("Failed to append leads sheet row for booking %s", booking_uuid)
+        log.exception("Failed to record leads sheet entry for booking %s", booking_uuid)
 
     return {"status": "recorded", "booking_id": booking_id}, 201
 

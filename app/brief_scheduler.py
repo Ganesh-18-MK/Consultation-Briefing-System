@@ -1,14 +1,28 @@
-"""Requirement 1: find consultations starting in about 15 minutes that
-haven't been briefed yet, and message the manager's private Teams chat
-with the client's name, the meeting's date/time, and a summary of what
-the client answered on the Calendly booking form. That answer can be a
-one-line note or a long, detailed narrative (case facts, dates, dollar
-amounts, deadlines), so it's condensed with Groq to at most 6-7
-sentences — see summarize_discussion_notes in app/summarizer.py, which
-is built to preserve concrete facts and not pad out an already-short
-answer. For repeat clients, a Groq-generated summary of their prior
-consultation history is added underneath too. Run every 2 minutes via
-cron (see deploy/crontab.txt).
+"""Requirement 1, updated 2026-09-15: message the manager's private
+Teams chat with each client's name, the meeting's date/time, and a
+summary of what the client answered on the Calendly booking form.
+
+Originally this fired ~15 minutes before each individual meeting. Mam's
+actual working hours turned out to be two fixed daily consultation
+blocks in US Central Time (9:00-10:15 AM and 3:00-5:15 PM) rather than
+scattered slots, so every consultation in a block is now briefed by
+that block's own shared deadline instead — see
+app/timezones.compute_brief_deadline_utc for exactly how that deadline
+is computed, and db.get_bookings_due_for_block_brief for the query.
+Each client still gets their own separate Teams message (not one
+combined digest) — they just land together once the block's deadline
+arrives rather than individually near each meeting's own start time. A
+booking outside both blocks falls back to the original ~15-minutes-
+before-start window (db.get_unbriefed_bookings_in_window).
+
+The client's raw answer can be a one-line note or a long, detailed
+narrative (case facts, dates, dollar amounts, deadlines), so it's
+condensed with Groq to at most 6-7 sentences — see
+summarize_discussion_notes in app/summarizer.py, which is built to
+preserve concrete facts and not pad out an already-short answer. For
+repeat clients, a Groq-generated summary of their prior consultation
+history is added underneath too. Run every 2 minutes via cron (see
+deploy/crontab.txt).
 
 Marking a booking "briefed" happens right after a delivery attempt, so
 a flaky Teams call can't cause the same client to get double-briefed on
@@ -100,7 +114,14 @@ def process_booking(booking) -> None:
 
 
 def run() -> None:
-    due = db.get_unbriefed_bookings_in_window()
+    # Primary path (2026-09-15 requirement): every consultation in one
+    # of mam's two fixed daily blocks, briefed by that block's shared
+    # deadline — see app/timezones.compute_brief_deadline_utc. Fallback
+    # path: the original ~15-minutes-before-start window, which now
+    # only ever matches a booking with no brief_deadline (outside both
+    # blocks) — see db.get_unbriefed_bookings_in_window's docstring —
+    # so the two lists never overlap.
+    due = db.get_bookings_due_for_block_brief() + db.get_unbriefed_bookings_in_window()
     if not due:
         log.info("No consultations due for briefing right now")
         return

@@ -1,6 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
-from app import brief_scheduler, summarizer, db, teams_delivery
+from app import brief_scheduler, leads_sheet, summarizer, db, teams_delivery
+
+# Captured at import time, before any per-test autouse mocking of
+# summarizer.summarize_discussion_notes (see conftest.py) rebinds the
+# module attribute — lets a specific test restore the real function.
+_real_summarize_discussion_notes = summarizer.summarize_discussion_notes
 
 
 def test_brief_uses_groq_summary_of_the_clients_answer(temp_db, monkeypatch):
@@ -70,14 +75,21 @@ def test_brief_includes_client_name_date_and_time(temp_db, monkeypatch):
     lines = dm_calls[0]
     joined = "\n".join(lines)
     assert "Client: Jane Client" in joined
-    assert f"Date: {start.strftime('%Y-%m-%d')}" in joined
-    assert "Time:" in joined
+    # Compare against the same conversion the app itself uses (UTC -> IST)
+    # rather than recomputing it here — a UTC-vs-IST date rollover near
+    # midnight would otherwise make this assertion flaky depending on
+    # when the test happens to run.
+    expected_date, expected_time = leads_sheet.format_date_time(start.isoformat())
+    assert f"Date: {expected_date}" in joined
+    assert f"Time: {expected_time}" in joined
 
 
 def test_brief_handles_missing_answer_gracefully(temp_db, monkeypatch):
     # summarize_discussion_notes itself handles the "no answer" case —
-    # not mocked here so the real (short-circuit, no Groq call) behavior
-    # is exercised for a None discussion_notes.
+    # restoring the real function (over the autouse mock in conftest.py)
+    # so the real short-circuit, no-Groq-call behavior is exercised for
+    # a None discussion_notes.
+    monkeypatch.setattr(summarizer, "summarize_discussion_notes", _real_summarize_discussion_notes)
     dm_calls = []
     monkeypatch.setattr(
         teams_delivery, "send_manager_message",

@@ -32,9 +32,36 @@ def no_signature_check(monkeypatch):
 @pytest.fixture(autouse=True)
 def isolated_leads_sheet_path(tmp_path, monkeypatch):
     """Every test gets its own throwaway leads-sheet path by default, so
-    a test that exercises a code path calling leads_sheet.append_booking_row
+    a test that exercises a code path calling leads_sheet.record_client_response
     (e.g. the Calendly webhook handler) can never write into the real
     leads.xlsx sitting in the project directory. Tests that specifically
     exercise leads_sheet.py already override this explicitly with their
     own tmp_path destination."""
     monkeypatch.setattr(settings, "leads_sheet_path", str(tmp_path / "_autouse_leads.xlsx"))
+
+
+@pytest.fixture(autouse=True)
+def mock_summarizer(request, monkeypatch):
+    """The Calendly webhook handler now summarizes the client's answer
+    with Groq immediately (for the leads sheet, not just the later Teams
+    brief) — autouse-mocked so no test hits the real Groq API just by
+    exercising the webhook path. Tests that care about the actual
+    summary text (e.g. most brief_scheduler tests, leads-sheet formatting
+    tests) override this with their own monkeypatch.setattr call, which
+    simply wins over this one within that same test.
+
+    Skipped entirely for tests/test_summarizer.py, whose whole point is
+    exercising the real (unmocked) summarize_discussion_notes/_complete
+    behavior — autouse-patching it there would defeat those tests."""
+    if request.module.__name__.rsplit(".", 1)[-1] == "test_summarizer":
+        yield
+        return
+
+    from app import summarizer
+
+    monkeypatch.setattr(
+        summarizer,
+        "summarize_discussion_notes",
+        lambda name, notes: "1. Mock summary point one.\n2. Mock summary point two.",
+    )
+    yield
